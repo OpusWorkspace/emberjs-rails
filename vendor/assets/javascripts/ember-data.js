@@ -1,8 +1,1548 @@
-// ==========================================================================
-// Project:  Ember Data
-// Copyright: ©2011 Living Social Inc. and contributors.
-// License:   Licensed under MIT license (see license.js)
-// ==========================================================================
+
+(function(exports) {
+window.DS = SC.Namespace.create();
+
+})({});
 
 
-(function(a){window.DS=SC.Namespace.create()})({}),function(a){DS.Adapter=SC.Object.extend({commit:function(a,b){b.updated.eachType(function(b,c){this.updateMany(a,b,c.slice())},this),b.created.eachType(function(b,c){this.createMany(a,b,c.slice())},this),b.deleted.eachType(function(b,c){this.deleteMany(a,b,c.slice())},this)},createMany:function(a,b,c){c.forEach(function(c){this.create(a,b,c)},this)},updateMany:function(a,b,c){c.forEach(function(c){this.update(a,b,c)},this)},deleteMany:function(a,b,c){c.forEach(function(c){this.deleteModel(a,b,c)},this)},findMany:function(a,b,c){c.forEach(function(c){this.find(a,b,c)},this)}})}({}),function(a){DS.fixtureAdapter=DS.Adapter.create({find:function(a,b,c){var d=b.FIXTURES;if(d.hasLoaded)return;setTimeout(function(){a.loadMany(b,d),d.hasLoaded=!0},300)},findMany:function(){this.find.apply(this,arguments)}})}({}),function(a){var b=SC.get,c=SC.set;DS.ModelArray=SC.ArrayProxy.extend({type:null,content:null,store:null,init:function(){c(this,"modelCache",Ember.A([])),this._super()},arrayDidChange:function(a,c,d,e){var f=b(this,"modelCache");f.replace(c,0,Array(e)),this._super(a,c,d,e)},arrayWillChange:function(a,c,d,e){this._super(a,c,d,e);var f=b(this,"modelCache");f.replace(c,d)},objectAtContent:function(a){var c=b(this,"modelCache"),d=c.objectAt(a);if(!d){var e=b(this,"store"),f=b(this,"content"),g=f.objectAt(a);g!==undefined&&(d=e.findByClientId(b(this,"type"),g),c.replace(a,1,[d]))}return d}}),DS.FilteredModelArray=DS.ModelArray.extend({filterFunction:null,updateFilter:SC.observer(function(){var a=b(this,"store");a.updateModelArrayFilter(this,b(this,"type"),b(this,"filterFunction"))},"filterFunction")}),DS.AdapterPopulatedModelArray=DS.ModelArray.extend({query:null,isLoaded:!1,load:function(a){var d=b(this,"store"),e=b(this,"type"),f=d.loadMany(e,a).clientIds;this.beginPropertyChanges(),c(this,"content",Ember.A(f)),c(this,"isLoaded",!0),this.endPropertyChanges()}})}({}),function(a){var b=SC.get,c=SC.set,d=SC.getPath,e=SC.String.fmt,f=SC.Object.extend({init:function(){this.clear()},clear:function(){this.set("presenceSet",{}),this.set("list",SC.NativeArray.apply([]))},add:function(a){var c=SC.guidFor(a),d=b(this,"presenceSet"),e=b(this,"list");if(c in d)return;d[c]=!0,e.pushObject(a)},remove:function(a){var c=SC.guidFor(a),d=b(this,"presenceSet"),e=b(this,"list");delete d[c],e.removeObject(a)},isEmpty:function(){return d(this,"list.length")===0},forEach:function(a,c){b(this,"list").forEach(function(b){a.call(c,b)})}});DS.Store=SC.Object.extend({init:function(){return(!b(DS,"defaultStore")||b(this,"isDefaultStore"))&&c(DS,"defaultStore",this),c(this,"data",[]),c(this,"ids",{}),c(this,"models",[]),c(this,"modelArrays",[]),c(this,"modelArraysByClientId",{}),c(this,"updatedTypes",f.create()),c(this,"createdTypes",f.create()),c(this,"deletedTypes",f.create()),this._super()},modelArraysForClientId:function(a){var c=b(this,"modelArraysByClientId"),d=c[a];return d||(d=c[a]=f.create()),d},adapter:null,_adapter:SC.computed(function(){var a=b(this,"adapter");return typeof a=="string"?d(this,a):a}).property("adapter").cacheable(),clientIdCounter:-1,create:function(a,e){e=e||{};var f=e[d(a,"proto.primaryKey")]||null,g=a.create({data:e||{},store:this});g.adapterDidCreate();var h=this.clientIdToHashMap(a),i=b(this,"models"),j=this.pushHash(e,f,a);return c(g,"clientId",j),i[j]=g,this.updateModelArrays(a,j,e),g},deleteModel:function(a){a.deleteModel()},find:function(a,b,c){if(b===undefined)return this.findMany(a,null,null);if(c!==undefined)return this.findMany(a,b,c);if(SC.typeOf(b)==="object")return this.findQuery(a,b);if(SC.isArray(b))return this.findMany(a,b);var d=this.clientIdForId(a,b);return this.findByClientId(a,d,b)},findByClientId:function(a,c,d){var f,g=b(this,"models"),h=this.clientIdToHashMap(a);if(c!==undefined)f=g[c],f||(f=this.createModel(a,c),f.setData(h[c]||null));else{c=this.pushHash(null,d,a),f=this.createModel(a,c);var i=b(this,"_adapter");if(i&&i.find)i.find(this,a,d);else throw e("Adapter is either null or do not implement `find` method",this)}return f},findMany:function(a,c,d){var f=this.idToClientIdMap(a),g=this.clientIdToHashMap(a),h,i=Ember.A([]);c?(h=[],c.forEach(function(b){var c=f[b];if(c===undefined||g[c]===undefined)c=this.pushHash(null,b,a),h.push(b);i.push(c)},this)):h=null;if(h&&b(h,"length")>0||d){var j=b(this,"_adapter");if(j&&j.findMany)j.findMany(this,a,h,d);else throw e("Adapter is either null or do not implement `findMany` method",this)}return this.createModelArray(a,i)},findQuery:function(a,c){var d=DS.AdapterPopulatedModelArray.create({type:a,content:Ember.A([]),store:this}),f=b(this,"_adapter");if(f&&f.findQuery)f.findQuery(this,a,c,d);else throw e("Adapter is either null or do not implement `findQuery` method",this);return d},findAll:function(a){var c=DS.ModelArray.create({type:a,content:Ember.A([]),store:this});this.registerModelArray(c,a);var d=b(this,"_adapter");return d&&d.findAll&&d.findAll(this,a),c},filter:function(a,b){var c=DS.FilteredModelArray.create({type:a,content:Ember.A([]),store:this,filterFunction:b});return this.registerModelArray(c,a,b),c},hashWasUpdated:function(a,b){var c=this.clientIdToHashMap(a),d=c[b];this.updateModelArrays(a,b,d)},modelBecameDirty:function(a,c){var d=b(this,a+"Types"),e=c.constructor;d.add(e);var f=this.typeMap(e)[a+"Models"];f.add(c)},modelBecameClean:function(a,c){var d=b(this,a+"Types"),e=c.constructor,f=this.typeMap(e)[a+"Models"];f.remove(c),f.isEmpty()&&d.remove(e)},eachDirtyType:function(a,c,d){var e=b(this,a+"Types"),f;e.forEach(function(e){f=this.typeMap(e)[a+"Models"],c.call(d,e,b(f,"list"))},this)},commit:function(){var a=this,c=function(b,c,d){a.eachDirtyType(b,function(a,b){b.forEach(function(a){a.willCommit()}),c.call(d,a,b)})},d={updated:{eachType:function(a,b){c("updated",a,b)}},created:{eachType:function(a,b){c("created",a,b)}},deleted:{eachType:function(a,b){c("deleted",a,b)}}},f=b(this,"_adapter");if(f&&f.commit)f.commit(this,d);else throw e("Adapter is either null or do not implement `commit` method",this)},didUpdateModels:function(a,b){arguments.length===2?a.forEach(function(a,c){this.didUpdateModel(a,b[c])},this):a.forEach(function(a){this.didUpdateModel(a)},this)},didUpdateModel:function(a,c){if(arguments.length===2){var d=b(a,"clientId"),e=this.clientIdToHashMap(a.constructor);e[d]=c,a.set("data",c)}a.adapterDidUpdate()},didDeleteModels:function(a){a.forEach(function(a){a.adapterDidDelete()})},didDeleteModel:function(a){a.adapterDidDelete()},didCreateModels:function(a,e,f){var g,h,i=d(a,"proto.primaryKey"),j=this.idToClientIdMap(a),k=this.clientIdToHashMap(a),l=this.idList(a);for(var m=0,n=b(e,"length");m<n;m++){var o=e[m],p=f[m];g=p[i],h=b(o,"clientId"),k[h]=p,c(o,"data",p),j[g]=h,l.push(g),o.adapterDidUpdate()}},didCreateModel:function(a,e){var f=a.constructor,g,h,i=d(f,"proto.primaryKey"),j=this.idToClientIdMap(f),k=this.clientIdToHashMap(f),l=this.idList(f);g=e[i],h=b(a,"clientId"),k[h]=e,c(a,"data",e),j[g]=h,l.push(g),a.adapterDidUpdate()},registerModelArray:function(a,c,d){var e=b(this,"modelArrays"),f=this.idToClientIdMap(c);e.push(a),this.updateModelArrayFilter(a,c,d)},createModelArray:function(a,b){var c=DS.ModelArray.create({type:a,content:b,store:this});return b.forEach(function(a){var b=this.modelArraysForClientId(a);b.add(c)},this),c},updateModelArrayFilter:function(a,b,c){var d=this.clientIdToHashMap(b),e=this.clientIdList(b);for(var f=0,g=e.length;f<g;f++)clientId=e[f],hash=d[clientId],hash&&this.updateModelArray(a,c,b,clientId,hash)},updateModelArrays:function(a,c,d){var e=b(this,"modelArrays");e.forEach(function(e){modelArrayType=b(e,"type"),filter=b(e,"filterFunction");if(a!==modelArrayType)return;this.updateModelArray(e,filter,a,c,d)},this)},updateModelArray:function(a,c,d,e,f){var g;c?g=c(f):g=!0;var h=b(a,"content"),i=h.indexOf(e)!==-1,j=this.modelArraysForClientId(e);g&&!i?(j.add(a),h.pushObject(e)):!g&&i&&(j.remove(a),h.removeObject(e))},removeFromModelArrays:function(a){var c=b(a,"clientId"),d=this.modelArraysForClientId(c);d.forEach(function(a){var d=b(a,"content");d.removeObject(c)})},typeMap:function(a){var c=b(this,"ids"),d=SC.guidFor(a),e=c[d];return e?e:c[d]={idToCid:{},idList:[],cidList:[],cidToHash:{},updatedModels:f.create(),createdModels:f.create(),deletedModels:f.create()}},idToClientIdMap:function(a){return this.typeMap(a).idToCid},idList:function(a){return this.typeMap(a).idList},clientIdList:function(a){return this.typeMap(a).cidList},clientIdToHashMap:function(a){return this.typeMap(a).cidToHash},clientIdForId:function(a,b){return this.typeMap(a).idToCid[b]},idForHash:function(a,b){var c=d(a,"proto.primaryKey");return b[c]},load:function(a,c,e){if(e===undefined){e=c;var f=d(a,"proto.primaryKey");c=e[f]}var g=b(this,"ids"),h=this.clientIdToHashMap(a),i=b(this,"models"),j=this.clientIdForId(a,c);if(j!==undefined){h[j]=e;var k=i[j];k&&(k.willLoadData(),k.setData(e))}else j=this.pushHash(e,c,a);return this.updateModelArrays(a,j,e),{id:c,clientId:j}},loadMany:function(a,c,e){var f=Ember.A([]);if(e===undefined){e=c,c=[];var g=d(a,"proto.primaryKey");c=e.map(function(a){return a[g]})}for(var h=0,i=b(c,"length");h<i;h++){var j=this.load(a,c[h],e[h]);f.pushObject(j.clientId)}return{clientIds:f,ids:c}},pushHash:function(a,b,c){var d=this.idToClientIdMap(c),e=this.clientIdList(c),f=this.idList(c),g=this.clientIdToHashMap(c),h=this.incrementProperty("clientIdCounter");return g[h]=a,b&&(d[b]=h,f.push(b)),e.push(h),h},createModel:function(a,d){var e;return b(this,"models")[d]=e=a.create({store:this,clientId:d}),c(e,"clientId",d),e.loadingData(),e}})}({}),function(a){var b=SC.get,c=SC.set,d=SC.getPath,e=SC.computed(function(a){var c=b(this,"parentState");if(c)return b(c,a)}).property();DS.State=SC.State.extend({isLoaded:e,isDirty:e,isSaving:e,isDeleted:e,isError:e,isNew:e});var f=function(){throw"You cannot load data into the store when its associated model is in its current state"},g={rootState:SC.State.create({isLoaded:!1,isDirty:!1,isSaving:!1,isDeleted:!1,isError:!1,isNew:!1,willLoadData:f,didCreate:function(a){a.goToState("loaded.created")},empty:DS.State.create({loadingData:function(a){a.goToState("loading")}}),loading:DS.State.create({willLoadData:SC.K,exit:function(a){var c=b(a,"model");c.didLoad()},setData:function(a,c){var d=b(a,"model");d.beginPropertyChanges(),d.set("data",c),c!==null&&a.goToState("loaded"),d.endPropertyChanges()}}),loaded:DS.State.create({isLoaded:!0,willLoadData:SC.K,setProperty:function(a,c){var d=c.key,e=c.value,f=b(a,"model"),g=f.constructor,h=b(f,"store"),i=b(f,"data");i[d]=e,h&&h.hashWasUpdated(g,b(f,"clientId")),a.goToState("updated")},"delete":function(a){a.goToState("deleted")},created:DS.State.create({isNew:!0,isDirty:!0,enter:function(a){var c=b(a,"model"),d=b(c,"store");d&&d.modelBecameDirty("created",c)},exit:function(a){var c=b(a,"model"),d=b(c,"store");c.didCreate(),d&&d.modelBecameClean("created",c)},setProperty:function(a,c){var d=c.key,e=c.value,f=b(a,"model"),g=f.constructor,h=b(f,"store"),i=b(f,"data");i[d]=e,h&&h.hashWasUpdated(g,b(f,"clientId"))},willCommit:function(a){a.goToState("saving")},saving:DS.State.create({isSaving:!0,didUpdate:function(a){a.goToState("loaded")}})}),updated:DS.State.create({isDirty:!0,willLoadData:f,enter:function(a){var c=b(a,"model"),d=b(c,"store");d&&d.modelBecameDirty("updated",c)},willCommit:function(a){a.goToState("saving")},exit:function(a){var c=b(a,"model"),d=b(c,"store");c.didUpdate(),d&&d.modelBecameClean("updated",c)},saving:DS.State.create({isSaving:!0,didUpdate:function(a){a.goToState("loaded")}})})}),deleted:DS.State.create({isDeleted:!0,isLoaded:!0,isDirty:!0,willLoadData:f,enter:function(a){var c=b(a,"model"),d=b(c,"store");d&&(d.removeFromModelArrays(c),d.modelBecameDirty("deleted",c))},willCommit:function(a){a.goToState("saving")},saving:DS.State.create({isSaving:!0,didDelete:function(a){a.goToState("saved")},exit:function(a){var c=b(a,"model"),d=b(c,"store");d.modelBecameClean("deleted",c)}}),saved:DS.State.create({isDirty:!1})}),error:DS.State.create({isError:!0})})};DS.StateManager=Ember.StateManager.extend({model:null,initialState:"rootState",states:g});var h=SC.computed(function(a){return b(d(this,"stateManager.currentState"),a)}).property("stateManager.currentState").cacheable();DS.Model=SC.Object.extend({isLoaded:h,isDirty:h,isSaving:h,isDeleted:h,isError:h,isNew:h,clientId:null,primaryKey:"id",data:null,didLoad:Ember.K,didUpdate:Ember.K,didCreate:Ember.K,init:function(){var a=DS.StateManager.create({model:this});c(this,"stateManager",a),a.goToState("empty")},setData:function(a){var c=b(this,"stateManager");c.send("setData",a)},setProperty:function(a,c){var d=b(this,"stateManager");d.send("setProperty",{key:a,value:c})},deleteModel:function(){var a=b(this,"stateManager");a.send("delete")},loadingData:function(){var a=b(this,"stateManager");a.send("loadingData")},willLoadData:function(){var a=b(this,"stateManager");a.send("willLoadData")},willCommit:function(){var a=b(this,"stateManager");a.send("willCommit")},adapterDidUpdate:function(){var a=b(this,"stateManager");a.send("didUpdate")},adapterDidCreate:function(){var a=b(this,"stateManager");a.send("didCreate")},adapterDidDelete:function(){var a=b(this,"stateManager");a.send("didDelete")},unknownProperty:function(a){var c=b(this,"data");if(c)return b(c,a)},setUnknownProperty:function(a,c){var d=b(this,"data");return this.setProperty(a,c),c}}),DS.attr=function(a,c){var d=DS.attr.transforms[a],e=d.from,f=d.to;return SC.computed(function(a,d){var g=b(this,"data");a=c&&c.key?c.key:a;if(d===undefined){if(!g)return;return e(g[a])}return d=f(d),this.setProperty(a,d),d}).property("data")};var i=function(a,c,d,e){var f=d?b(d,e):[];return a.loadMany(c,f).ids},j=function(a,c,d,e){return d?b(d,e):[]};DS.hasMany=function(a,d){var e=d&&d.embedded,f;return findMany=e?i:j,SC.computed(function(e){var f=b(this,"data"),g,h=b(this,"store");e=d&&d.key?d.key:e,g=findMany(h,a,f,e);var i=h.findMany(a,g);return SC.addObserver(this,"data",function(){var d=b(this,"data"),f=findMany(h,a,d,e);h.findMany(a,f);var g=h.idToClientIdMap(a),j=f.map(function(a){return g[a]});c(i,"content",Ember.A(j))}),i}).property().cacheable()},DS.attr.transforms={string:{from:function(a){return String(a)},to:function(a){return String(a)}},integer:{from:function(a){return Number(a)},to:function(a){return Number(a)}},"boolean":{from:function(a){return Boolean(a)},to:function(a){return Boolean(a)}},date:{from:function(a){var b=typeof a;return b==="string"||b==="number"?new Date(a):a==null?a:null},to:function(a){if(a instanceof Date){var b=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],c=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],d=function(a){return a<10?"0"+a:""+a},e=a.getUTCFullYear(),f=a.getUTCMonth(),g=a.getUTCDate(),h=a.getUTCDay(),i=a.getUTCHours(),j=a.getUTCMinutes(),k=a.getUTCSeconds(),l=b[h],m=d(g),n=c[f];return l+", "+m+" "+n+" "+e+" "+d(i)+":"+d(j)+":"+d(k)+" GMT"}return a===undefined?undefined:null}}}}({}),function(a){}({})
+(function(exports) {
+DS.Adapter = SC.Object.extend({
+  commit: function(store, commitDetails) {
+    commitDetails.updated.eachType(function(type, array) {
+      this.updateRecords(store, type, array.slice());
+    }, this);
+
+    commitDetails.created.eachType(function(type, array) {
+      this.createRecords(store, type, array.slice());
+    }, this);
+
+    commitDetails.deleted.eachType(function(type, array) {
+      this.deleteRecords(store, type, array.slice());
+    }, this);
+  },
+
+  createRecords: function(store, type, models) {
+    models.forEach(function(model) {
+      this.createRecord(store, type, model);
+    }, this);
+  },
+
+  updateRecords: function(store, type, models) {
+    models.forEach(function(model) {
+      this.updateRecord(store, type, model);
+    }, this);
+  },
+
+  deleteRecords: function(store, type, models) {
+    models.forEach(function(model) {
+      this.deleteRecord(store, type, model);
+    }, this);
+  },
+
+  findMany: function(store, type, ids) {
+    ids.forEach(function(id) {
+      this.find(store, type, id);
+    }, this);
+  }
+});
+})({});
+
+
+(function(exports) {
+DS.fixtureAdapter = DS.Adapter.create({
+  find: function(store, type, id) {
+    var fixtures = type.FIXTURES;
+
+    ember_assert("Unable to find fixtures for model type "+type.toString(), !!fixtures);
+    if (fixtures.hasLoaded) { return; }
+
+    setTimeout(function() {
+      store.loadMany(type, fixtures);
+      fixtures.hasLoaded = true;
+    }, 300);
+  },
+
+  findMany: function() {
+    this.find.apply(this, arguments);
+  }
+});
+
+})({});
+
+
+(function(exports) {
+var get = SC.get, set = SC.set;
+
+DS.ModelArray = SC.ArrayProxy.extend({
+  type: null,
+  content: null,
+  store: null,
+
+  init: function() {
+    set(this, 'modelCache', Ember.A([]));
+    this._super();
+  },
+
+  arrayDidChange: function(array, index, removed, added) {
+    var modelCache = get(this, 'modelCache');
+    modelCache.replace(index, 0, Array(added));
+    
+    this._super(array, index, removed, added);
+  },
+
+  arrayWillChange: function(array, index, removed, added) {
+    this._super(array, index, removed, added);
+
+    var modelCache = get(this, 'modelCache');
+    modelCache.replace(index, removed);
+  },
+
+  objectAtContent: function(index) {
+    var modelCache = get(this, 'modelCache');
+    var model = modelCache.objectAt(index);
+
+    if (!model) {
+      var store = get(this, 'store');
+      var content = get(this, 'content');
+
+      var contentObject = content.objectAt(index);
+
+      if (contentObject !== undefined) {
+        model = store.findByClientId(get(this, 'type'), contentObject);
+        modelCache.replace(index, 1, [model]);
+      }
+    }
+
+    return model;
+  }
+});
+
+DS.FilteredModelArray = DS.ModelArray.extend({
+  filterFunction: null,
+
+  updateFilter: SC.observer(function() {
+    var store = get(this, 'store');
+    store.updateModelArrayFilter(this, get(this, 'type'), get(this, 'filterFunction'));
+  }, 'filterFunction')
+});
+
+DS.AdapterPopulatedModelArray = DS.ModelArray.extend({
+  query: null,
+  isLoaded: false,
+
+  load: function(array) {
+    var store = get(this, 'store'), type = get(this, 'type');
+
+    var clientIds = store.loadMany(type, array).clientIds;
+
+    this.beginPropertyChanges();
+    set(this, 'content', Ember.A(clientIds));
+    set(this, 'isLoaded', true);
+    this.endPropertyChanges();
+  }
+});
+
+})({});
+
+
+(function(exports) {
+var get = Ember.get, set = Ember.set, getPath = Ember.getPath, fmt = Ember.String.fmt;
+
+var OrderedSet = SC.Object.extend({
+  init: function() {
+    this.clear();
+  },
+
+  clear: function() {
+    this.set('presenceSet', {});
+    this.set('list', SC.NativeArray.apply([]));
+  },
+
+  add: function(obj) {
+    var guid = SC.guidFor(obj),
+        presenceSet = get(this, 'presenceSet'),
+        list = get(this, 'list');
+
+    if (guid in presenceSet) { return; }
+
+    presenceSet[guid] = true;
+    list.pushObject(obj);
+  },
+
+  remove: function(obj) {
+    var guid = SC.guidFor(obj),
+        presenceSet = get(this, 'presenceSet'),
+        list = get(this, 'list');
+
+    delete presenceSet[guid];
+    list.removeObject(obj);
+  },
+
+  isEmpty: function() {
+    return getPath(this, 'list.length') === 0;
+  },
+
+  forEach: function(fn, self) {
+    get(this, 'list').forEach(function(item) {
+      fn.call(self, item);
+    });
+  },
+
+  toArray: function() {
+    return get(this, 'list').slice();
+  }
+});
+
+/**
+  A Hash stores values indexed by keys. Unlike JavaScript's
+  default Objects, the keys of a Hash can be any JavaScript
+  object.
+
+  Internally, a Hash has two data structures:
+
+    `keys`: an OrderedSet of all of the existing keys
+    `values`: a JavaScript Object indexed by the
+      Ember.guidFor(key)
+
+  When a key/value pair is added for the first time, we
+  add the key to the `keys` OrderedSet, and create or
+  replace an entry in `values`. When an entry is deleted,
+  we delete its entry in `keys` and `values`.
+*/
+
+var Hash = SC.Object.extend({
+  init: function() {
+    set(this, 'keys', OrderedSet.create());
+    set(this, 'values', {});
+  },
+
+  add: function(key, value) {
+    var keys = get(this, 'keys'), values = get(this, 'values');
+    var guid = Ember.guidFor(key);
+
+    keys.add(key);
+    values[guid] = value;
+
+    return value;
+  },
+
+  remove: function(key) {
+    var keys = get(this, 'keys'), values = get(this, 'values');
+    var guid = Ember.guidFor(key), value;
+
+    keys.remove(key);
+
+    value = values[guid];
+    delete values[guid];
+
+    return value;
+  },
+
+  fetch: function(key) {
+    var values = get(this, 'values');
+    var guid = Ember.guidFor(key);
+
+    return values[guid];
+  },
+
+  forEach: function(fn, binding) {
+    var keys = get(this, 'keys'), values = get(this, 'values');
+
+    keys.forEach(function(key) {
+      var guid = Ember.guidFor(key);
+      fn.call(binding, key, values[guid]);
+    });
+  }
+});
+
+DS.Transaction = Ember.Object.extend({
+  init: function() {
+    set(this, 'dirty', {
+      created: Hash.create(),
+      updated: Hash.create(),
+      deleted: Hash.create()
+    });
+  },
+
+  createRecord: function(type, hash) {
+    var store = get(this, 'store');
+
+    return store.createRecord(type, hash, this);
+  },
+
+  add: function(model) {
+    var modelTransaction = get(model, 'transaction');
+    ember_assert("Models cannot belong to more than one transaction at a time.", !modelTransaction);
+
+    set(model, 'transaction', this);
+  },
+
+  modelBecameDirty: function(kind, model) {
+    var dirty = get(get(this, 'dirty'), kind),
+        type = model.constructor;
+
+    var models = dirty.fetch(type);
+
+    models = models || dirty.add(type, OrderedSet.create());
+    models.add(model);
+  },
+
+  modelBecameClean: function(kind, model) {
+    var dirty = get(get(this, 'dirty'), kind),
+        type = model.constructor;
+
+    var models = dirty.fetch(type);
+    models.remove(model);
+
+    set(model, 'transaction', null);
+  },
+
+  commit: function() {
+    var dirtyMap = get(this, 'dirty');
+
+    var iterate = function(kind, fn, binding) {
+      var dirty = get(dirtyMap, kind);
+
+      dirty.forEach(function(type, models) {
+        if (models.isEmpty()) { return; }
+
+        models.forEach(function(model) { model.willCommit(); });
+        fn.call(binding, type, models.toArray());
+      });
+    };
+
+    var commitDetails = {
+      updated: {
+        eachType: function(fn, binding) { iterate('updated', fn, binding); }
+      },
+
+      created: {
+        eachType: function(fn, binding) { iterate('created', fn, binding); }
+      },
+
+      deleted: {
+        eachType: function(fn, binding) { iterate('deleted', fn, binding); }
+      }
+    };
+
+    var store = get(this, 'store');
+    var adapter = get(store, '_adapter');
+    if (adapter && adapter.commit) { adapter.commit(store, commitDetails); }
+    else { throw fmt("Adapter is either null or do not implement `commit` method", this); }
+  }
+});
+
+})({});
+
+
+(function(exports) {
+var get = SC.get, set = SC.set, getPath = SC.getPath, fmt = SC.String.fmt;
+
+var OrderedSet = SC.Object.extend({
+  init: function() {
+    this.clear();
+  },
+
+  clear: function() {
+    this.set('presenceSet', {});
+    this.set('list', SC.NativeArray.apply([]));
+  },
+
+  add: function(obj) {
+    var guid = SC.guidFor(obj),
+        presenceSet = get(this, 'presenceSet'),
+        list = get(this, 'list');
+
+    if (guid in presenceSet) { return; }
+
+    presenceSet[guid] = true;
+    list.pushObject(obj);
+  },
+
+  remove: function(obj) {
+    var guid = SC.guidFor(obj),
+        presenceSet = get(this, 'presenceSet'),
+        list = get(this, 'list');
+
+    delete presenceSet[guid];
+    list.removeObject(obj);
+  },
+
+  isEmpty: function() {
+    return getPath(this, 'list.length') === 0;
+  },
+
+  forEach: function(fn, self) {
+    get(this, 'list').forEach(function(item) {
+      fn.call(self, item);
+    });
+  }
+});
+
+// Implementors Note:
+//
+//   The variables in this file are consistently named according to the following
+//   scheme:
+//
+//   * +id+ means an identifier managed by an external source, provided inside the
+//     data hash provided by that source.
+//   * +clientId+ means a transient numerical identifier generated at runtime by
+//     the data store. It is important primarily because newly created objects may
+//     not yet have an externally generated id.
+//   * +type+ means a subclass of DS.Model.
+
+/**
+  The store contains all of the hashes for data models loaded from the server.
+  It is also responsible for creating instances of DS.Model when you request one
+  of these data hashes, so that they can be bound to in your Handlebars templates.
+
+  Create a new store like this:
+
+       MyApp.store = DS.Store.create();
+
+  You can retrieve DS.Model instances from the store in several ways. To retrieve
+  a model for a specific id, use the `find()` method:
+
+       var model = MyApp.store.find(MyApp.Contact, 123);
+
+   By default, the store will talk to your backend using a standard REST mechanism.
+   You can customize how the store talks to your backend by specifying a custom adapter:
+
+       MyApp.store = DS.Store.create({
+         adapter: 'MyApp.CustomAdapter'
+       });
+
+    You can learn more about writing a custom adapter by reading the `DS.Adapter`
+    documentation.
+*/
+DS.Store = SC.Object.extend({
+
+  /**
+    Many methods can be invoked without specifying which store should be used.
+    In those cases, the first store created will be used as the default. If
+    an application has multiple stores, it should specify which store to use
+    when performing actions, such as finding records by id.
+
+    The init method registers this store as the default if none is specified.
+  */
+  init: function() {
+    if (!get(DS, 'defaultStore') || get(this, 'isDefaultStore')) {
+      set(DS, 'defaultStore', this);
+    }
+
+    set(this, 'data', []);
+    set(this, 'ids', {});
+    set(this, 'models', []);
+    set(this, 'modelArrays', []);
+    set(this, 'modelArraysByClientId', {});
+    set(this, 'defaultTransaction', DS.Transaction.create({ store: this }));
+
+    return this._super();
+  },
+
+  transaction: function() {
+    return DS.Transaction.create({ store: this });
+  },
+
+  modelArraysForClientId: function(clientId) {
+    var modelArrays = get(this, 'modelArraysByClientId');
+    var ret = modelArrays[clientId];
+
+    if (!ret) {
+      ret = modelArrays[clientId] = OrderedSet.create();
+    }
+
+    return ret;
+  },
+
+  /**
+    The adapter to use to communicate to a backend server or other persistence layer.
+
+    This can be specified as an instance, a class, or a property path that specifies
+    where the adapter can be located.
+
+    @property {DS.Adapter|String}
+  */
+  adapter: null,
+
+  _adapter: SC.computed(function() {
+    var adapter = get(this, 'adapter');
+    if (typeof adapter === 'string') {
+      return getPath(this, adapter);
+    }
+    return adapter;
+  }).property('adapter').cacheable(),
+
+  clientIdCounter: -1,
+
+  // ....................
+  // . CREATE NEW MODEL .
+  // ....................
+
+  createRecord: function(type, hash, transaction) {
+    hash = hash || {};
+
+    var id = hash[getPath(type, 'proto.primaryKey')] || null;
+
+    var model = type.create({
+      data: hash || {},
+      store: this,
+      transaction: transaction
+    });
+
+    model.adapterDidCreate();
+
+    var data = this.clientIdToHashMap(type);
+    var models = get(this, 'models');
+
+    var clientId = this.pushHash(hash, id, type);
+
+    set(model, 'clientId', clientId);
+
+    models[clientId] = model;
+    
+    this.updateModelArrays(type, clientId, hash);
+
+    return model;
+  },
+
+  // ................
+  // . DELETE MODEL .
+  // ................
+
+  deleteRecord: function(model) {
+    model.deleteRecord();
+  },
+
+  // ...............
+  // . FIND MODELS .
+  // ...............
+
+  /**
+    Finds a model by its id. If the data for that model has already been
+    loaded, an instance of DS.Model with that data will be returned
+    immediately. Otherwise, an empty DS.Model instance will be returned in
+    the loading state. As soon as the requested data is available, the model
+    will be moved into the loaded state and all of the information will be
+    available.
+
+    Note that only one DS.Model instance is ever created per unique id for a
+    given type.
+
+    Example:
+
+        var record = MyApp.store.find(MyApp.Person, 1234);
+
+    @param {DS.Model} type
+    @param {String|Number} id
+  */
+  find: function(type, id, query) {
+    if (id === undefined) {
+      return this.findMany(type, null, null);
+    }
+
+    if (query !== undefined) {
+      return this.findMany(type, id, query);
+    } else if (SC.typeOf(id) === 'object') {
+      return this.findQuery(type, id);
+    }
+
+    if (SC.isArray(id)) {
+      return this.findMany(type, id);
+    }
+
+    var clientId = this.clientIdForId(type, id);
+
+    return this.findByClientId(type, clientId, id);
+  },
+
+  findByClientId: function(type, clientId, id) {
+    var model;
+
+    var models = get(this, 'models');
+    var data = this.clientIdToHashMap(type);
+
+    // If there is already a clientId assigned for this
+    // type/id combination, try to find an existing
+    // model for that id and return. Otherwise,
+    // materialize a new model and set its data to the
+    // value we already have.
+    if (clientId !== undefined) {
+      model = models[clientId];
+
+      if (!model) {
+        // create a new instance of the model in the
+        // 'isLoading' state
+        model = this.createModel(type, clientId);
+
+        // immediately set its data
+        model.setData(data[clientId] || null);
+      }
+    } else {
+      clientId = this.pushHash(null, id, type);
+
+      // create a new instance of the model in the
+      // 'isLoading' state
+      model = this.createModel(type, clientId);
+
+      // let the adapter set the data, possibly async
+      var adapter = get(this, '_adapter');
+      if (adapter && adapter.find) { adapter.find(this, type, id); }
+      else { throw fmt("Adapter is either null or do not implement `find` method", this); }
+    }
+
+    return model;
+  },
+
+  /** @private
+  */
+  findMany: function(type, ids, query) {
+    var idToClientIdMap = this.idToClientIdMap(type);
+    var data = this.clientIdToHashMap(type), needed;
+
+    var clientIds = Ember.A([]);
+
+    if (ids) {
+      needed = [];
+
+      ids.forEach(function(id) {
+        var clientId = idToClientIdMap[id];
+        if (clientId === undefined || data[clientId] === undefined) {
+          clientId = this.pushHash(null, id, type);
+          needed.push(id);
+        }
+
+        clientIds.push(clientId);
+      }, this);
+    } else {
+      needed = null;
+    }
+
+    if ((needed && get(needed, 'length') > 0) || query) {
+      var adapter = get(this, '_adapter');
+      if (adapter && adapter.findMany) { adapter.findMany(this, type, needed, query); }
+      else { throw fmt("Adapter is either null or do not implement `findMany` method", this); }
+    }
+
+    return this.createModelArray(type, clientIds);
+  },
+
+  findQuery: function(type, query) {
+    var array = DS.AdapterPopulatedModelArray.create({ type: type, content: Ember.A([]), store: this });
+    var adapter = get(this, '_adapter');
+    if (adapter && adapter.findQuery) { adapter.findQuery(this, type, query, array); }
+    else { throw fmt("Adapter is either null or do not implement `findQuery` method", this); }
+    return array;
+  },
+
+  findAll: function(type) {
+    var array = DS.ModelArray.create({ type: type, content: Ember.A([]), store: this });
+    this.registerModelArray(array, type);
+
+    var adapter = get(this, '_adapter');
+    if (adapter && adapter.findAll) { adapter.findAll(this, type); }
+
+    return array;
+  },
+
+  filter: function(type, filter) {
+    var array = DS.FilteredModelArray.create({ type: type, content: Ember.A([]), store: this, filterFunction: filter });
+
+    this.registerModelArray(array, type, filter);
+
+    return array;
+  },
+
+  // ............
+  // . UPDATING .
+  // ............
+
+  hashWasUpdated: function(type, clientId) {
+    var clientIdToHashMap = this.clientIdToHashMap(type);
+    var hash = clientIdToHashMap[clientId];
+
+    this.updateModelArrays(type, clientId, hash);
+  },
+
+  // ..............
+  // . PERSISTING .
+  // ..............
+
+  commit: function() {
+    get(this, 'defaultTransaction').commit();
+  },
+
+  didUpdateRecords: function(array, hashes) {
+    if (arguments.length === 2) {
+      array.forEach(function(model, idx) {
+        this.didUpdateRecord(model, hashes[idx]);
+      }, this);
+    } else {
+      array.forEach(function(model) {
+        this.didUpdateRecord(model);
+      }, this);
+    }
+  },
+
+  didUpdateRecord: function(model, hash) {
+    if (arguments.length === 2) {
+      var clientId = get(model, 'clientId');
+      var data = this.clientIdToHashMap(model.constructor);
+
+      data[clientId] = hash;
+      model.set('data', hash);
+    }
+
+    model.adapterDidUpdate();
+  },
+
+  didDeleteRecords: function(array) {
+    array.forEach(function(model) {
+      model.adapterDidDelete();
+    });
+  },
+
+  didDeleteRecord: function(model) {
+    model.adapterDidDelete();
+  },
+
+  didCreateRecords: function(type, array, hashes) {
+    var id, clientId, primaryKey = getPath(type, 'proto.primaryKey');
+
+    var idToClientIdMap = this.idToClientIdMap(type);
+    var data = this.clientIdToHashMap(type);
+    var idList = this.idList(type);
+
+    for (var i=0, l=get(array, 'length'); i<l; i++) {
+      var model = array[i], hash = hashes[i];
+      id = hash[primaryKey];
+      clientId = get(model, 'clientId');
+
+      data[clientId] = hash;
+      set(model, 'data', hash);
+
+      idToClientIdMap[id] = clientId;
+      idList.push(id);
+
+      model.adapterDidUpdate();
+    }
+  },
+
+  didCreateRecord: function(model, hash) {
+    var type = model.constructor;
+
+    var id, clientId, primaryKey = getPath(type, 'proto.primaryKey');
+
+    var idToClientIdMap = this.idToClientIdMap(type);
+    var data = this.clientIdToHashMap(type);
+    var idList = this.idList(type);
+
+    id = hash[primaryKey];
+
+    clientId = get(model, 'clientId');
+    data[clientId] = hash;
+    set(model, 'data', hash);
+
+    idToClientIdMap[id] = clientId;
+    idList.push(id);
+
+    model.adapterDidUpdate();
+  },
+
+  recordWasInvalid: function(record, errors) {
+    record.wasInvalid(errors);
+  },
+
+  // ................
+  // . MODEL ARRAYS .
+  // ................
+
+  registerModelArray: function(array, type, filter) {
+    var modelArrays = get(this, 'modelArrays');
+    var idToClientIdMap = this.idToClientIdMap(type);
+
+    modelArrays.push(array);
+
+    this.updateModelArrayFilter(array, type, filter);
+  },
+
+  createModelArray: function(type, clientIds) {
+    var array = DS.ModelArray.create({ type: type, content: clientIds, store: this });
+
+    clientIds.forEach(function(clientId) {
+      var modelArrays = this.modelArraysForClientId(clientId);
+      modelArrays.add(array);
+    }, this);
+
+    return array;
+  },
+
+  updateModelArrayFilter: function(array, type, filter) {
+    var data = this.clientIdToHashMap(type);
+    var allClientIds = this.clientIdList(type);
+
+    for (var i=0, l=allClientIds.length; i<l; i++) {
+      clientId = allClientIds[i];
+
+      hash = data[clientId];
+
+      if (hash) {
+        this.updateModelArray(array, filter, type, clientId, hash);
+      }
+    }
+  },
+
+  updateModelArrays: function(type, clientId, hash) {
+    var modelArrays = get(this, 'modelArrays');
+
+    modelArrays.forEach(function(array) {
+          modelArrayType = get(array, 'type');
+          filter = get(array, 'filterFunction');
+
+      if (type !== modelArrayType) { return; }
+
+      this.updateModelArray(array, filter, type, clientId, hash);
+    }, this);
+  },
+
+  updateModelArray: function(array, filter, type, clientId, hash) {
+    var shouldBeInArray;
+
+    if (!filter) {
+      shouldBeInArray = true;
+    } else {
+      shouldBeInArray = filter(hash);
+    }
+
+    var content = get(array, 'content');
+    var alreadyInArray = content.indexOf(clientId) !== -1;
+
+    var modelArrays = this.modelArraysForClientId(clientId);
+
+    if (shouldBeInArray && !alreadyInArray) {
+      modelArrays.add(array);
+      content.pushObject(clientId);
+    } else if (!shouldBeInArray && alreadyInArray) {
+      modelArrays.remove(array);
+      content.removeObject(clientId);
+    }
+  },
+
+  removeFromModelArrays: function(model) {
+    var clientId = get(model, 'clientId');
+    var modelArrays = this.modelArraysForClientId(clientId);
+
+    modelArrays.forEach(function(array) {
+      var content = get(array, 'content');
+      content.removeObject(clientId);
+    });
+  },
+
+  // ............
+  // . TYPE MAP .
+  // ............
+
+  typeMap: function(type) {
+    var ids = get(this, 'ids');
+    var guidForType = SC.guidFor(type);
+
+    var idToClientIdMap = ids[guidForType];
+
+    if (idToClientIdMap) {
+      return idToClientIdMap;
+    } else {
+      return (ids[guidForType] =
+        {
+          idToCid: {},
+          idList: [],
+          cidList: [],
+          cidToHash: {}
+      });
+    }
+  },
+
+  idToClientIdMap: function(type) {
+    return this.typeMap(type).idToCid;
+  },
+
+  idList: function(type) {
+    return this.typeMap(type).idList;
+  },
+
+  clientIdList: function(type) {
+    return this.typeMap(type).cidList;
+  },
+
+  clientIdToHashMap: function(type) {
+    return this.typeMap(type).cidToHash;
+  },
+
+  /** @private
+
+    For a given type and id combination, returns the client id used by the store.
+    If no client id has been assigned yet, `undefined` is returned.
+
+    @param {DS.Model} type
+    @param {String|Number} id
+  */
+  clientIdForId: function(type, id) {
+    return this.typeMap(type).idToCid[id];
+  },
+
+  idForHash: function(type, hash) {
+    var primaryKey = getPath(type, 'proto.primaryKey');
+
+    ember_assert("A data hash was loaded for a model of type " + type.toString() + " but no primary key '" + primaryKey + "' was provided.", !!hash[primaryKey]);
+    return hash[primaryKey];
+  },
+
+  // ................
+  // . LOADING DATA .
+  // ................
+
+  /**
+    Load a new data hash into the store for a given id and type combination.
+    If data for that model had been loaded previously, the new information
+    overwrites the old.
+
+    If the model you are loading data for has outstanding changes that have not
+    yet been saved, an exception will be thrown.
+
+    @param {DS.Model} type
+    @param {String|Number} id
+    @param {Object} hash the data hash to load
+  */
+  load: function(type, id, hash) {
+    if (hash === undefined) {
+      hash = id;
+      var primaryKey = getPath(type, 'proto.primaryKey');
+      ember_assert("A data hash was loaded for a model of type " + type.toString() + " but no primary key '" + primaryKey + "' was provided.", !!hash[primaryKey]);
+      id = hash[primaryKey];
+    }
+
+    var ids = get(this, 'ids');
+    var data = this.clientIdToHashMap(type);
+    var models = get(this, 'models');
+
+    var clientId = this.clientIdForId(type, id);
+
+    if (clientId !== undefined) {
+      data[clientId] = hash;
+
+      var model = models[clientId];
+      if (model) {
+        model.willLoadData();
+        model.setData(hash);
+      }
+    } else {
+      clientId = this.pushHash(hash, id, type);
+    }
+
+    this.updateModelArrays(type, clientId, hash);
+
+    return { id: id, clientId: clientId };
+  },
+
+  loadMany: function(type, ids, hashes) {
+    var clientIds = Ember.A([]);
+
+    if (hashes === undefined) {
+      hashes = ids;
+      ids = [];
+      var primaryKey = getPath(type, 'proto.primaryKey');
+
+      ids = hashes.map(function(hash) {
+        ember_assert("A data hash was loaded for a model of type " + type.toString() + " but no primary key '" + primaryKey + "' was provided.", !!hash[primaryKey]);
+        return hash[primaryKey];
+      });
+    }
+
+    for (var i=0, l=get(ids, 'length'); i<l; i++) {
+      var loaded = this.load(type, ids[i], hashes[i]);
+      clientIds.pushObject(loaded.clientId);
+    }
+
+    return { clientIds: clientIds, ids: ids };
+  },
+
+  /** @private
+
+    Stores a data hash for the specified type and id combination and returns
+    the client id.
+
+    @param {Object} hash
+    @param {String|Number} id
+    @param {DS.Model} type
+    @returns {Number}
+  */
+  pushHash: function(hash, id, type) {
+    var idToClientIdMap = this.idToClientIdMap(type);
+    var clientIdList = this.clientIdList(type);
+    var idList = this.idList(type);
+    var data = this.clientIdToHashMap(type);
+
+    var clientId = this.incrementProperty('clientIdCounter');
+
+    data[clientId] = hash;
+
+    // if we're creating an item, this process will be done
+    // later, once the object has been persisted.
+    if (id) {
+      idToClientIdMap[id] = clientId;
+      idList.push(id);
+    }
+
+    clientIdList.push(clientId);
+
+    return clientId;
+  },
+
+  // .........................
+  // . MODEL MATERIALIZATION .
+  // .........................
+
+  createModel: function(type, clientId) {
+    var model;
+
+    get(this, 'models')[clientId] = model = type.create({ store: this, clientId: clientId });
+    set(model, 'clientId', clientId);
+    model.loadingData();
+    return model;
+  }
+});
+
+
+})({});
+
+
+(function(exports) {
+var get = SC.get, set = SC.set, getPath = SC.getPath;
+
+var stateProperty = SC.computed(function(key) {
+  var parent = get(this, 'parentState');
+  if (parent) {
+    return get(parent, key);
+  }
+}).property();
+
+DS.State = SC.State.extend({
+  isLoaded: stateProperty,
+  isDirty: stateProperty,
+  isSaving: stateProperty,
+  isDeleted: stateProperty,
+  isError: stateProperty,
+  isNew: stateProperty,
+  isValid: stateProperty
+});
+
+var cantLoadData = function() {
+  // TODO: get the current state name
+  throw "You cannot load data into the store when its associated model is in its current state";
+};
+
+var isEmptyObject = function(obj) {
+  for (var prop in obj) {
+    if (!obj.hasOwnProperty(prop)) { continue; }
+    return false;
+  }
+
+  return true;
+};
+
+var setProperty = function(manager, context) {
+  var key = context.key, value = context.value;
+
+  var model = get(manager, 'model'), type = model.constructor;
+  var store = get(model, 'store');
+  var data = get(model, 'data');
+
+  data[key] = value;
+
+  if (store) { store.hashWasUpdated(type, get(model, 'clientId')); }
+};
+
+// several states share extremely common functionality, so we are factoring
+// them out into a common class.
+var DirtyState = DS.State.extend({
+  // these states are virtually identical except that
+  // they (thrice) use their states name explicitly.
+  //
+  // child classes implement stateName.
+  stateName: null,
+  isDirty: true,
+  willLoadData: cantLoadData,
+
+  enter: function(manager) {
+    var stateName = get(this, 'stateName'),
+        model = get(manager, 'model');
+
+    model.withTransaction(function (t) {
+      t.modelBecameDirty(stateName, model);
+    });
+  },
+
+  exit: function(manager) {
+    var stateName = get(this, 'stateName'),
+        model = get(manager, 'model');
+
+    this.notifyModel(model);
+
+    model.withTransaction(function (t) {
+      t.modelBecameClean(stateName, model);
+    });
+  },
+
+  setProperty: setProperty,
+
+  willCommit: function(manager) {
+    manager.goToState('saving');
+  },
+
+  saving: DS.State.extend({
+    isSaving: true,
+
+    didUpdate: function(manager) {
+      manager.goToState('loaded');
+    },
+
+    wasInvalid: function(manager, errors) {
+      var model = get(manager, 'model');
+
+      set(model, 'errors', errors);
+      manager.goToState('invalid');
+    }
+  }),
+
+  invalid: DS.State.extend({
+    isValid: false,
+
+    setProperty: function(manager, context) {
+      setProperty(manager, context);
+
+      var stateName = getPath(this, 'parentState.stateName'),
+          model = get(manager, 'model'),
+          errors = get(model, 'errors'),
+          key = context.key;
+
+      delete errors[key];
+
+      if (isEmptyObject(errors)) {
+        manager.goToState(stateName);
+      }
+    }
+  })
+});
+
+var states = {
+  rootState: SC.State.create({
+    isLoaded: false,
+    isDirty: false,
+    isSaving: false,
+    isDeleted: false,
+    isError: false,
+    isNew: false,
+    isValid: true,
+
+    willLoadData: cantLoadData,
+
+    didCreate: function(manager) {
+      manager.goToState('loaded.created');
+    },
+
+    empty: DS.State.create({
+      loadingData: function(manager) {
+        manager.goToState('loading');
+      }
+    }),
+
+    loading: DS.State.create({
+      willLoadData: SC.K,
+
+      exit: function(manager) {
+        var model = get(manager, 'model');
+        model.didLoad();
+      },
+
+      setData: function(manager, data) {
+        var model = get(manager, 'model');
+
+        model.beginPropertyChanges();
+        model.set('data', data);
+
+        if (data !== null) {
+          manager.goToState('loaded');
+        }
+
+        model.endPropertyChanges();
+      }
+    }),
+
+    loaded: DS.State.create({
+      isLoaded: true,
+
+      willLoadData: SC.K,
+
+      setProperty: function(manager, context) {
+        setProperty(manager, context);
+        manager.goToState('updated');
+      },
+
+      'delete': function(manager) {
+        manager.goToState('deleted');
+      },
+
+      created: DirtyState.create({
+        stateName: 'created',
+        isNew: true,
+
+        notifyModel: function(model) {
+          model.didCreate();
+        }
+      }),
+
+      updated: DirtyState.create({
+        stateName: 'updated',
+
+        notifyModel: function(model) {
+          model.didUpdate();
+        }
+      })
+    }),
+
+    deleted: DS.State.create({
+      isDeleted: true,
+      isLoaded: true,
+      isDirty: true,
+
+      willLoadData: cantLoadData,
+
+      enter: function(manager) {
+        var model = get(manager, 'model');
+        var store = get(model, 'store');
+
+        if (store) {
+          store.removeFromModelArrays(model);
+        }
+
+        model.withTransaction(function(t) {
+          t.modelBecameDirty('deleted', model);
+        });
+      },
+
+      willCommit: function(manager) {
+        manager.goToState('saving');
+      },
+
+      saving: DS.State.create({
+        isSaving: true,
+
+        didDelete: function(manager) {
+          manager.goToState('saved');
+        },
+
+        exit: function(stateManager) {
+          var model = get(stateManager, 'model');
+
+          model.withTransaction(function(t) {
+            t.modelBecameClean('deleted', model);
+          });
+        }
+      }),
+
+      saved: DS.State.create({
+        isDirty: false
+      })
+    }),
+
+    error: DS.State.create({
+      isError: true
+    })
+  })
+};
+
+DS.StateManager = Ember.StateManager.extend({
+  model: null,
+  initialState: 'rootState',
+  states: states
+});
+
+var retrieveFromCurrentState = SC.computed(function(key) {
+  return get(getPath(this, 'stateManager.currentState'), key);
+}).property('stateManager.currentState').cacheable();
+
+DS.Model = SC.Object.extend({
+  isLoaded: retrieveFromCurrentState,
+  isDirty: retrieveFromCurrentState,
+  isSaving: retrieveFromCurrentState,
+  isDeleted: retrieveFromCurrentState,
+  isError: retrieveFromCurrentState,
+  isNew: retrieveFromCurrentState,
+  isValid: retrieveFromCurrentState,
+
+  clientId: null,
+
+  // because unknownProperty is used, any internal property
+  // must be initialized here.
+  primaryKey: 'id',
+  data: null,
+  transaction: null,
+
+  didLoad: Ember.K,
+  didUpdate: Ember.K,
+  didCreate: Ember.K,
+
+  init: function() {
+    var stateManager = DS.StateManager.create({
+      model: this
+    });
+
+    set(this, 'stateManager', stateManager);
+    stateManager.goToState('empty');
+  },
+
+  withTransaction: function(fn) {
+    var transaction = get(this, 'transaction') || getPath(this, 'store.defaultTransaction');
+
+    if (transaction) { fn(transaction); }
+  },
+
+  setData: function(data) {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('setData', data);
+  },
+
+  setProperty: function(key, value) {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('setProperty', { key: key, value: value });
+  },
+
+  deleteRecord: function() {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('delete');
+  },
+
+  destroy: function() {
+    this.deleteRecord();
+    this._super();
+  },
+
+  loadingData: function() {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('loadingData');
+  },
+
+  willLoadData: function() {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('willLoadData');
+  },
+
+  willCommit: function() {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('willCommit');
+  },
+
+  adapterDidUpdate: function() {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('didUpdate');
+  },
+
+  adapterDidCreate: function() {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('didCreate');
+  },
+
+  adapterDidDelete: function() {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('didDelete');
+  },
+
+  wasInvalid: function(errors) {
+    var stateManager = get(this, 'stateManager');
+    stateManager.send('wasInvalid', errors);
+  },
+
+  unknownProperty: function(key) {
+    var data = get(this, 'data');
+
+    if (data) {
+      return get(data, key);
+    }
+  },
+
+  setUnknownProperty: function(key, value) {
+    var data = get(this, 'data');
+    ember_assert("You cannot set a model attribute before its data is loaded.", !!data);
+
+    this.setProperty(key, value);
+    return value;
+  }
+});
+
+DS.attr = function(type, options) {
+  var transform = DS.attr.transforms[type];
+  var transformFrom = transform.from;
+  var transformTo = transform.to;
+
+  return SC.computed(function(key, value) {
+    var data = get(this, 'data');
+
+    key = (options && options.key) ? options.key : key;
+
+    if (value === undefined) {
+      if (!data) { return; }
+
+      return transformFrom(data[key]);
+    } else {
+      ember_assert("You cannot set a model attribute before its data is loaded.", !!data);
+
+      value = transformTo(value);
+      this.setProperty(key, value);
+      return value;
+    }
+  }).property('data');
+};
+
+var embeddedFindMany = function(store, type, data, key) {
+  var association = data ? get(data, key) : [];
+  return store.loadMany(type, association).ids;
+};
+
+var referencedFindMany = function(store, type, data, key) {
+  return data ? get(data, key) : [];
+};
+
+DS.hasMany = function(type, options) {
+  var embedded = options && options.embedded, load;
+
+  findMany = embedded ? embeddedFindMany : referencedFindMany;
+
+  return SC.computed(function(key) {
+    var data = get(this, 'data'), ids;
+    var store = get(this, 'store');
+
+    key = (options && options.key) ? options.key : key;
+    ids = findMany(store, type, data, key);
+    var hasMany = store.findMany(type, ids);
+
+    SC.addObserver(this, 'data', function() {
+      var data = get(this, 'data');
+
+      var ids = findMany(store, type, data, key);
+      store.findMany(type, ids);
+
+      var idToClientIdMap = store.idToClientIdMap(type);
+
+      var clientIds = ids.map(function(id) {
+        return idToClientIdMap[id];
+      });
+
+      set(hasMany, 'content', Ember.A(clientIds));
+    });
+
+    return hasMany;
+  }).property().cacheable();
+};
+
+DS.attr.transforms = {
+  string: {
+    from: function(serialized) {
+      return String(serialized);
+    },
+
+    to: function(deserialized) {
+      return String(deserialized);
+    }
+  },
+
+  integer: {
+    from: function(serialized) {
+      return Number(serialized);
+    },
+
+    to: function(deserialized) {
+      return Number(deserialized);
+    }
+  },
+
+  boolean: {
+    from: function(serialized) {
+      return Boolean(serialized);
+    },
+
+    to: function(deserialized) {
+      return Boolean(deserialized);
+    }
+  },
+
+  date: {
+    from: function(serialized) {
+      var type = typeof serialized;
+
+      if (type === "string" || type === "number") {
+        return new Date(serialized);
+      } else if (serialized === null || serialized === undefined) {
+        // if the value is not present in the data,
+        // return undefined, not null.
+        return serialized;
+      } else {
+        return null;
+      }
+    },
+
+    to: function(date) {
+      if (date instanceof Date) {
+        var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+        var pad = function(num) {
+          return num < 10 ? "0"+num : ""+num;
+        };
+
+        var utcYear = date.getUTCFullYear(),
+            utcMonth = date.getUTCMonth(),
+            utcDayOfMonth = date.getUTCDate(),
+            utcDay = date.getUTCDay(),
+            utcHours = date.getUTCHours(),
+            utcMinutes = date.getUTCMinutes(),
+            utcSeconds = date.getUTCSeconds();
+
+
+        var dayOfWeek = days[utcDay];
+        var dayOfMonth = pad(utcDayOfMonth);
+        var month = months[utcMonth];
+
+        return dayOfWeek + ", " + dayOfMonth + " " + month + " " + utcYear + " " +
+               pad(utcHours) + ":" + pad(utcMinutes) + ":" + pad(utcSeconds) + " GMT";
+      } else if (date === undefined) {
+        return undefined;
+      } else {
+        return null;
+      }
+    }
+  }
+};
+
+})({});
+
+
+(function(exports) {
+//Copyright (C) 2011 by Living Social, Inc.
+
+//Permission is hereby granted, free of charge, to any person obtaining a copy of
+//this software and associated documentation files (the "Software"), to deal in
+//the Software without restriction, including without limitation the rights to
+//use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+//of the Software, and to permit persons to whom the Software is furnished to do
+//so, subject to the following conditions:
+
+//The above copyright notice and this permission notice shall be included in all
+//copies or substantial portions of the Software.
+
+//THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//SOFTWARE.
+})({});
